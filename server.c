@@ -15,15 +15,29 @@
 #define BACKLOG 10
 #define LOGS_FILENAME "logs.txt"
 #define MAXBUFSIZE 100
+#define SESSION_TIME 60
 
 enum commands {TIME, SESSION, END};
 
 
-void LogMessage(const char* message, const char* error);
+void LogMessage(const char* ip, const char* command);
 void *get_in_addr(struct sockaddr *sa);
+void getCurrentTime(char* message);
 
 
-void LogMessage(const char* message, const char* error) {
+void getCurrentTime(char* message) {
+    struct tm* timeinfo;
+    time_t rawtime;
+    
+    time(&rawtime);
+
+    timeinfo = localtime(&rawtime);
+
+    strftime(message, MAXBUFSIZE, "%Y-%m-%d %X", timeinfo);
+}
+
+void LogMessage(const char* ip, const char* command) {
+    char timeStr[MAXBUFSIZE];
     struct tm* timeinfo;
     FILE* logs;
     time_t rawtime;
@@ -32,8 +46,9 @@ void LogMessage(const char* message, const char* error) {
 
     time(&rawtime);
     timeinfo = localtime(&rawtime);
+    strftime(timeStr, MAXBUFSIZE, "%c", timeinfo);
     
-    fprintf(logs, "%s %s !%s", message, error, asctime(timeinfo));
+    fprintf(logs, "(%s)  Client IP-%s  Client command-%s \n", timeStr, ip, command);
 
     fclose(logs);
 }
@@ -55,11 +70,11 @@ int main(void) {
     struct timeval tv;
     socklen_t sin_size;
     int yes = 1;
-    char s[INET6_ADDRSTRLEN];
+    char cli_ip[INET6_ADDRSTRLEN];
     int rv, numbytes;
 
 
-    tv.tv_sec = 5;
+    tv.tv_sec = SESSION_TIME;
     tv.tv_usec = 0;  // Not init'ing this can cause strange errors
 
     memset(&hints, 0, sizeof hints);
@@ -68,30 +83,29 @@ int main(void) {
     hints.ai_flags = AI_PASSIVE; // use my IP
 
     if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
-        LogMessage("getaddrinfo error", gai_strerror(rv));
-        // fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        fprintf(stderr, "server: getaddrinfo: %s\n", gai_strerror(rv));
         exit(1);
     }
 
     // loop through all the results and bind to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                p->ai_protocol)) == -1) {
-            LogMessage("socket create error ", strerror(errno));
+                p->ai_protocol)) < 0) {
+            perror("server: socket");
             continue;
         }
 
-        if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+        if (bind(sockfd, p->ai_addr, p->ai_addrlen) < 0) {
             close(sockfd);
-            LogMessage("bind error ", strerror(errno));
+            perror("server: bind");
             continue;
         }
 
         break;
     }
 
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-        LogMessage("setsockopt error ", strerror(errno));
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
+        perror("server: setsockopt error");
         exit(1);
     }
 
@@ -99,13 +113,13 @@ int main(void) {
     freeaddrinfo(servinfo); 
 
     if (p == NULL)  {
-        LogMessage("server bind error ", "");
+        fprintf(stderr, "server: failed to bind\n");
         exit(1);
     }
 
 
-    if (listen(sockfd, BACKLOG) == -1) {
-        perror("listen");
+    if (listen(sockfd, BACKLOG) < 0) {
+        perror("server: listen error");
         exit(1);
     }
 
@@ -114,41 +128,40 @@ int main(void) {
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-        if (new_fd == -1) {
-            LogMessage("accept error", "");
+        if (new_fd < 0) {
+            perror("server: accept error");
             continue;
         }
 
-        if (setsockopt(new_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv,sizeof(struct timeval)) == -1) {
-            LogMessage("setsockopt error ", strerror(errno));
+        if (setsockopt(new_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv,sizeof(struct timeval)) < 0) {
+            perror("server: setsockopt error");
             exit(1);
         }
 
 
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
-            s, sizeof s);
-        LogMessage("got connection from", s);
+            cli_ip, sizeof cli_ip);
 
         if (!fork()) { // this is the child process
-            // char command;
             char response[MAXBUFSIZE];
 
             bzero(response, MAXBUFSIZE);
-            close(sockfd); // child doesn't need the listener
+            close(sockfd);
 
             while(1) {
                 if ((numbytes = recv(new_fd, &comm, sizeof(comm), 0)) < 0) {
-                    LogMessage("recv error", strerror(errno));
+                    perror("server: recv error");
                     break;
                 } else if (numbytes == 0) {
-                    LogMessage("Client close connection", "");
                     break;  
                 }
 
                 switch (comm) {
                     case(TIME):
-                        strcpy(response, "time");
+                        getCurrentTime(response);
+                        LogMessage(cli_ip, "TIME");
+
                         break;
                     case(SESSION):
                         strcpy(response, "session");
@@ -162,10 +175,9 @@ int main(void) {
                 }
 
 
-                LogMessage(response, "");
 
                 if (send(new_fd, response, MAXBUFSIZE-1, 0) < 0) {
-                    LogMessage("send error", strerror(errno));
+                    perror("server: send error");
                     exit(1);
                 }
             }

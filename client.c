@@ -25,7 +25,7 @@ void *get_in_addr(struct sockaddr *sa) {
 }
 
 int main(int argc, char *argv[]) {
-    enum commands comm = 3;
+    enum commands comm = 0;
 
     int sockfd, numbytes;  
     char buf[MAXDATASIZE];
@@ -82,9 +82,14 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    // buf[numbytes] = '\0';
+    if ((numbytes = recv(sockfd, &buf, MAXDATASIZE, 0)) < 0) {
+        perror("recv");
+        exit(1);
+    }
 
-    printf("client: received\n");
+    buf[numbytes] = '\0';
+
+    printf("client: received %s\n", buf);
 
     close(sockfd);
 

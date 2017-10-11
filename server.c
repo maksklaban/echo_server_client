@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -21,11 +22,13 @@
 
 enum commands {TIME, SESSION, END};
 
+static unsigned long long* counter;
 
 void LogMessage(const char* ip, const char* command);
 void *get_in_addr(struct sockaddr *sa);
 void getCurrentTime(char* message);
 void getSessionCounter(char* message);
+
 
 void LogMessage(const char* ip, const char* command) {
     char timeStr[MAXBUFSIZE];
@@ -64,14 +67,17 @@ void getCurrentTime(char* message) {
 }
 
 void getSessionCounter(char* message) {
-    static unsigned long long counter = 0;
-
-    if (counter < ULLONG_MAX) {
-        counter += 1;
+    if (*counter < ULLONG_MAX) {
+        *counter += 1;
+        // munmap(counter, sizeof *counter);
+        // printf("42\n");
     } else {
-        counter = 0;
+        *counter = 0;
+        printf("43\n");
     }
-    sprintf(message, "%llu", counter);
+
+    sprintf(message, "%llu", *counter);
+
 }
 
 int main(void) {
@@ -84,6 +90,10 @@ int main(void) {
     int yes = 1;
     char cli_ip[INET6_ADDRSTRLEN];
     int rv, numbytes;
+
+    counter = mmap(NULL, sizeof *counter, PROT_READ | PROT_WRITE, 
+                    MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    *counter = 0;
 
     tv.tv_sec = SESSION_TIME;
     tv.tv_usec = 0;  // Not init'ing this can cause strange errors
@@ -106,6 +116,11 @@ int main(void) {
             continue;
         }
 
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
+            perror("server: setsockopt error");
+            exit(1);
+        }
+
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) < 0) {
             close(sockfd);
             perror("server: bind");
@@ -115,11 +130,6 @@ int main(void) {
         break;
     }
 
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
-        perror("server: setsockopt error");
-        exit(1);
-    }
-
 
     freeaddrinfo(servinfo); 
 
@@ -127,6 +137,7 @@ int main(void) {
         fprintf(stderr, "server: failed to bind\n");
         exit(1);
     }
+
 
 
     if (listen(sockfd, BACKLOG) < 0) {
@@ -168,6 +179,7 @@ int main(void) {
                 } else if (numbytes == 0) {
                     break;  
                 }
+                // printf("%d\n", comm);
 
                 switch (comm) {
                     case(TIME):
@@ -176,15 +188,16 @@ int main(void) {
 
                         break;
                     case(SESSION):
+                        // printf("42\n");
                         getSessionCounter(response);
                         LogMessage(cli_ip, "SESSION");
                         
                         break;
                     case(END):
-                        // strcpy(response, "end");
                         LogMessage(cli_ip, "END");
                         close(new_fd);
-                        break;
+
+                        exit(1);
                     default:
                         strcpy(response, "def");
                         break;
@@ -197,14 +210,13 @@ int main(void) {
                 }
             }
 
-            // if (send(new_fd, "Hello, world!", 13, 0) == -1) {
-            //     perror("send");
-            // }
 
             close(new_fd);
+            munmap(counter, sizeof *counter);
             exit(0);
         }
         close(new_fd);  // parent doesn't need this
+        munmap(counter, sizeof *counter);
     }
 
     return 0;

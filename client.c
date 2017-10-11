@@ -14,6 +14,7 @@
 
 #define MAXDATASIZE 100 
 
+enum commands {TIME, SESSION, END};
 
 void *get_in_addr(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
@@ -24,6 +25,8 @@ void *get_in_addr(struct sockaddr *sa) {
 }
 
 int main(int argc, char *argv[]) {
+    enum commands comm = 3;
+
     int sockfd, numbytes;  
     char buf[MAXDATASIZE];
     struct addrinfo hints, *servinfo, *p;
@@ -73,7 +76,8 @@ int main(int argc, char *argv[]) {
     freeaddrinfo(servinfo); // all done with this structure
 
     // sleep(6);
-    if ((numbytes = send(sockfd, "olololo-trololo", 16, 0)) < 0) {
+
+    if ((numbytes = send(sockfd, &comm, sizeof(comm), 0)) < 0) {
         perror("recv");
         exit(1);
     }

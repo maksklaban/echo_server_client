@@ -15,9 +15,8 @@
 #define BACKLOG 10
 #define LOGS_FILENAME "logs.txt"
 #define MAXBUFSIZE 100
-#define TIME "t"
-#define SESSION "s"
-#define END "e"
+
+enum commands {TIME, SESSION, END};
 
 
 void LogMessage(const char* message, const char* error);
@@ -49,6 +48,7 @@ void *get_in_addr(struct sockaddr *sa) {
 
 
 int main(void) {
+    enum commands comm;
     int sockfd, new_fd;
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr;
@@ -57,6 +57,7 @@ int main(void) {
     int yes = 1;
     char s[INET6_ADDRSTRLEN];
     int rv, numbytes;
+
 
     tv.tv_sec = 5;
     tv.tv_usec = 0;  // Not init'ing this can cause strange errors
@@ -130,14 +131,14 @@ int main(void) {
         LogMessage("got connection from", s);
 
         if (!fork()) { // this is the child process
-            char command;
+            // char command;
             char response[MAXBUFSIZE];
 
-            bzero()
+            bzero(response, MAXBUFSIZE);
             close(sockfd); // child doesn't need the listener
 
             while(1) {
-                if ((numbytes = recv(new_fd, command, 1, 0)) < 0) {
+                if ((numbytes = recv(new_fd, &comm, sizeof(comm), 0)) < 0) {
                     LogMessage("recv error", strerror(errno));
                     break;
                 } else if (numbytes == 0) {
@@ -145,17 +146,25 @@ int main(void) {
                     break;  
                 }
 
-                switch (command) {
+                switch (comm) {
                     case(TIME):
-                        str
-                        response = "time";
-
+                        strcpy(response, "time");
+                        break;
+                    case(SESSION):
+                        strcpy(response, "session");
+                        break;
+                    case(END):
+                        strcpy(response, "end");
+                        break;
+                    default:
+                        strcpy(response, "def");
+                        break;
                 }
 
 
-                LogMessage(buff, "");
+                LogMessage(response, "");
 
-                if (send(new_fd, buff, MAXBUFSIZE-1, 0) < 0) {
+                if (send(new_fd, response, MAXBUFSIZE-1, 0) < 0) {
                     LogMessage("send error", strerror(errno));
                     exit(1);
                 }

@@ -25,7 +25,7 @@ void *get_in_addr(struct sockaddr *sa) {
 }
 
 int main(int argc, char *argv[]) {
-    enum commands comm = 0;
+    enum commands comm = 2;
 
     int sockfd, numbytes;  
     char buf[MAXDATASIZE];

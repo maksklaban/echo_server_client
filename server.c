@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <limits.h>
 
 #define PORT "50000"
 
@@ -17,24 +18,14 @@
 #define MAXBUFSIZE 100
 #define SESSION_TIME 60
 
+
 enum commands {TIME, SESSION, END};
 
 
 void LogMessage(const char* ip, const char* command);
 void *get_in_addr(struct sockaddr *sa);
 void getCurrentTime(char* message);
-
-
-void getCurrentTime(char* message) {
-    struct tm* timeinfo;
-    time_t rawtime;
-    
-    time(&rawtime);
-
-    timeinfo = localtime(&rawtime);
-
-    strftime(message, MAXBUFSIZE, "%Y-%m-%d %X", timeinfo);
-}
+void getSessionCounter(char* message);
 
 void LogMessage(const char* ip, const char* command) {
     char timeStr[MAXBUFSIZE];
@@ -61,6 +52,27 @@ void *get_in_addr(struct sockaddr *sa) {
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+void getCurrentTime(char* message) {
+    struct tm* timeinfo;
+    time_t rawtime;
+    
+    time(&rawtime);
+
+    timeinfo = localtime(&rawtime);
+
+    strftime(message, MAXBUFSIZE, "%Y-%m-%d %X", timeinfo);
+}
+
+void getSessionCounter(char* message) {
+    static unsigned long long counter = 0;
+
+    if (counter < ULLONG_MAX) {
+        counter += 1;
+    } else {
+        counter = 0;
+    }
+    sprintf(message, "%llu", counter);
+}
 
 int main(void) {
     enum commands comm;
@@ -72,7 +84,6 @@ int main(void) {
     int yes = 1;
     char cli_ip[INET6_ADDRSTRLEN];
     int rv, numbytes;
-
 
     tv.tv_sec = SESSION_TIME;
     tv.tv_usec = 0;  // Not init'ing this can cause strange errors
@@ -128,6 +139,7 @@ int main(void) {
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+
         if (new_fd < 0) {
             perror("server: accept error");
             continue;
@@ -139,7 +151,7 @@ int main(void) {
         }
 
 
-        inet_ntop(their_addr.ss_family,
+        inet_ntop(their_addr.ss_family, 
             get_in_addr((struct sockaddr *)&their_addr),
             cli_ip, sizeof cli_ip);
 
@@ -164,16 +176,19 @@ int main(void) {
 
                         break;
                     case(SESSION):
-                        strcpy(response, "session");
+                        getSessionCounter(response);
+                        LogMessage(cli_ip, "SESSION");
+                        
                         break;
                     case(END):
-                        strcpy(response, "end");
+                        // strcpy(response, "end");
+                        LogMessage(cli_ip, "END");
+                        close(new_fd);
                         break;
                     default:
                         strcpy(response, "def");
                         break;
                 }
-
 
 
                 if (send(new_fd, response, MAXBUFSIZE-1, 0) < 0) {

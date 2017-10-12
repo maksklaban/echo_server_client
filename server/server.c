@@ -1,35 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <time.h>
-#include <limits.h>
-#include <signal.h>
-
-
-#define PORT "50000"
-#define BACKLOG 10
-#define LOGS_FILENAME "logs.txt"
-#define MAXBUFSIZE 100
-#define SESSION_TIME 60
-
-
-enum commands {TIME, SESSION, END};
-
-
-void sigchld_handler(int s);
-void LogMessage(const char* ip, const char* command, FILE* logs);
-void *get_in_addr(struct sockaddr *sa);
-void getCurrentTime(char* message);
-void startEchoServer();
-
+#include "server.h"
 
 void sigchld_handler(int s) {
     int saved_errno = errno;
@@ -131,7 +100,7 @@ void startEchoServer() {
     }
 
 
-    if (listen(sockfd, BACKLOG) < 0) {
+    if (listen(sockfd, MAXCLIENTS) < 0) {
         perror("server: listen error");
         exit(1);
     }
@@ -217,9 +186,9 @@ void startEchoServer() {
             close(new_fd);
             exit(0);
         }
-        fclose(logs);
         close(new_fd);  // parent doesn't need this
     }
+    fclose(logs);
 }
 
 int main(int argc, char *argv[]) {

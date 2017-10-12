@@ -1,23 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <time.h>
-
-#include <arpa/inet.h>
-
-#define PORT "50000"
-#define SERVER "localhost"
-
-#define MAXDATASIZE 100 
-#define SEQTIMEOUT 10
-
-enum commands {TIME, SESSION, END};
+#include "client.h"
 
 void print_help(const char* app_name) {
     printf("Usage: %s [OPTION]\n", app_name);
@@ -27,15 +8,13 @@ void print_help(const char* app_name) {
     printf(" -o                'for an ordered query sequence'\n");
 }
 
-int main(int argc, char *argv[]) {
+void startClient(int argc, char *argv[]) {
     enum commands comm;
     struct addrinfo hints, *servinfo, *p;
     int sockfd, numbytes;  
     int rv;
-    char buf[MAXDATASIZE];
-    char s[INET6_ADDRSTRLEN];
+    char buf[MAXBUFSIZE];
     int flag;
-
 
     if (argc == 2 ) {
         if (strcmp(argv[1], "-r") == 0) {
@@ -98,7 +77,7 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
-        if ((numbytes = recv(sockfd, &buf, MAXDATASIZE, 0)) < 0) {
+        if ((numbytes = recv(sockfd, &buf, MAXBUFSIZE, 0)) < 0) {
             perror("recv");
             exit(1);
         } else if (numbytes == 0) {
@@ -119,6 +98,10 @@ int main(int argc, char *argv[]) {
     }
 
     close(sockfd);
+}
+
+int main(int argc, char *argv[]) {
+    startClient(argc, argv);
 
     return 0;
 }

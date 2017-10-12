@@ -19,7 +19,7 @@
 
 enum commands {TIME, SESSION, END};
 
-void print_help(char* app_name) {
+void print_help(const char* app_name) {
     printf("Usage: %s [OPTION]\n", app_name);
     printf(" OPTIONS:\n");
     printf(" -h                'print this help'\n");
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
     int rv;
     char buf[MAXDATASIZE];
     char s[INET6_ADDRSTRLEN];
-    int flag = 0;
+    int flag;
 
 
     if (argc == 2 ) {

@@ -5,15 +5,16 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/mman.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <time.h>
 #include <limits.h>
+#include <signal.h>
+
 
 #define PORT "50000"
-
 #define BACKLOG 10
 #define LOGS_FILENAME "logs.txt"
 #define MAXBUFSIZE 100
@@ -22,29 +23,32 @@
 
 enum commands {TIME, SESSION, END};
 
-static unsigned long long* counter;
 
-void LogMessage(const char* ip, const char* command);
+void sigchld_handler(int s);
+void LogMessage(const char* ip, const char* command, FILE* logs);
 void *get_in_addr(struct sockaddr *sa);
 void getCurrentTime(char* message);
-void getSessionCounter(char* message);
+void startEchoServer();
 
 
-void LogMessage(const char* ip, const char* command) {
+void sigchld_handler(int s) {
+    int saved_errno = errno;
+
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+
+    errno = saved_errno;
+}
+
+void LogMessage(const char* ip, const char* command, FILE* logs) {
     char timeStr[MAXBUFSIZE];
     struct tm* timeinfo;
-    FILE* logs;
     time_t rawtime;
-    
-    logs = fopen(LOGS_FILENAME, "a");
 
     time(&rawtime);
     timeinfo = localtime(&rawtime);
     strftime(timeStr, MAXBUFSIZE, "%c", timeinfo);
     
     fprintf(logs, "(%s)  Client IP-%s  Client command-%s \n", timeStr, ip, command);
-
-    fclose(logs);
 }
 
 void *get_in_addr(struct sockaddr *sa) {
@@ -66,37 +70,24 @@ void getCurrentTime(char* message) {
     strftime(message, MAXBUFSIZE, "%Y-%m-%d %X", timeinfo);
 }
 
-void getSessionCounter(char* message) {
-    if (*counter < ULLONG_MAX) {
-        *counter += 1;
-        // munmap(counter, sizeof *counter);
-        // printf("42\n");
-    } else {
-        *counter = 0;
-        printf("43\n");
-    }
-
-    sprintf(message, "%llu", *counter);
-
-}
-
-int main(void) {
+void startEchoServer() {
     enum commands comm;
-    int sockfd, new_fd;
+    FILE* logs;
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr;
     struct timeval tv;
+    struct sigaction sa;
     socklen_t sin_size;
     int yes = 1;
-    char cli_ip[INET6_ADDRSTRLEN];
+    int sockfd, new_fd;
     int rv, numbytes;
+    char cli_ip[INET6_ADDRSTRLEN];
 
-    counter = mmap(NULL, sizeof *counter, PROT_READ | PROT_WRITE, 
-                    MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    *counter = 0;
+    logs = fopen(LOGS_FILENAME, "a");
 
+    //Need for socket timeout opt
     tv.tv_sec = SESSION_TIME;
-    tv.tv_usec = 0;  // Not init'ing this can cause strange errors
+    tv.tv_usec = 0;
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
@@ -116,6 +107,7 @@ int main(void) {
             continue;
         }
 
+        //Handle "Address already in use" error message
         if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
             perror("server: setsockopt error");
             exit(1);
@@ -139,11 +131,20 @@ int main(void) {
     }
 
 
-
     if (listen(sockfd, BACKLOG) < 0) {
         perror("server: listen error");
         exit(1);
     }
+
+    sa.sa_handler = sigchld_handler; // reap all dead processes
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+        perror("server: sigaction");
+        exit(1);
+    }
+
 
     printf("server: waiting for connections...\n");
 
@@ -151,17 +152,18 @@ int main(void) {
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
 
+
         if (new_fd < 0) {
             perror("server: accept error");
             continue;
         }
-
+        //set socket timeout opt
         if (setsockopt(new_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv,sizeof(struct timeval)) < 0) {
             perror("server: setsockopt error");
             exit(1);
         }
 
-
+        //Conver client IP to string
         inet_ntop(their_addr.ss_family, 
             get_in_addr((struct sockaddr *)&their_addr),
             cli_ip, sizeof cli_ip);
@@ -170,6 +172,7 @@ int main(void) {
             char response[MAXBUFSIZE];
 
             bzero(response, MAXBUFSIZE);
+            //Close main socket
             close(sockfd);
 
             while(1) {
@@ -179,27 +182,26 @@ int main(void) {
                 } else if (numbytes == 0) {
                     break;  
                 }
-                // printf("%d\n", comm);
 
                 switch (comm) {
                     case(TIME):
                         getCurrentTime(response);
-                        LogMessage(cli_ip, "TIME");
+                        LogMessage(cli_ip, "TIME", logs);
 
                         break;
                     case(SESSION):
-                        // printf("42\n");
-                        getSessionCounter(response);
-                        LogMessage(cli_ip, "SESSION");
+                        sprintf(response, "%d", getpid());
+                        LogMessage(cli_ip, "SESSION", logs);
                         
                         break;
                     case(END):
-                        LogMessage(cli_ip, "END");
+                        LogMessage(cli_ip, "END", logs);
                         close(new_fd);
+                        fclose(logs);
 
-                        exit(1);
+                        exit(0);
                     default:
-                        strcpy(response, "def");
+                        strcpy(response, "default");
                         break;
                 }
 
@@ -211,13 +213,17 @@ int main(void) {
             }
 
 
+            fclose(logs);
             close(new_fd);
-            munmap(counter, sizeof *counter);
             exit(0);
         }
+        fclose(logs);
         close(new_fd);  // parent doesn't need this
-        munmap(counter, sizeof *counter);
     }
+}
+
+int main(int argc, char *argv[]) {
+    startEchoServer();
 
     return 0;
 }

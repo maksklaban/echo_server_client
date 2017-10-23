@@ -27,7 +27,7 @@ class tcpServer {
         int sessionCounter;
         
         void prepareSocket();
-        void handleConnection(int newSocket, const char* ip);
+        void handleConnection(int newSocket, const char* ip, int uniqCounter);
         void* get_in_addr(struct sockaddr *sa);
         void logMessage(const char* ip, const char* message, FILE* logs);
         void getCurrentTime(char* message);

@@ -42,14 +42,14 @@ void tcpServer::startServer() {
             get_in_addr((struct sockaddr *)&their_addr),
             clientIp, sizeof clientIp);
 
-        std::thread conn(&tcpServer::handleConnection, this, newSock, clientIp);
+        std::thread conn(&tcpServer::handleConnection, this, newSock, clientIp, this->getSessionCounter());
         conn.detach();
 
         this->sessionCounter += 1;
     }
 }
 
-void tcpServer::handleConnection(int newSock, const char* clientIp) {
+void tcpServer::handleConnection(int newSock, const char* clientIp, int uniqCounter) {
     char response[MAXBUFSIZE];
     int numbytes;
     enum commands comm;
@@ -72,7 +72,7 @@ void tcpServer::handleConnection(int newSock, const char* clientIp) {
 
                 break;
             case(SESSION):
-                sprintf(response, "%d", this->getSessionCounter());
+                sprintf(response, "%d", uniqCounter);
                 this->logMessage(clientIp, "SESSION", logs);
                 
                 break;
@@ -136,6 +136,7 @@ void tcpServer::prepareSocket() {
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
 
     if ((getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
         throw std::runtime_error("server: getaddrinfo");

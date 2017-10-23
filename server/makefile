@@ -1,13 +1,17 @@
-CC = gcc
-CFLAGS = -Wall -std=gnu11
-OUTFILE = server
-OBJS = server.o
-SRCS = server.c
+CC=g++
+CFLAGS=-c -Wall -std=c++11
+SOURCES=main.cpp tcpServer.cpp
+OBJECTS=$(SOURCES:.cpp=.o)
+LDFLAGS=-lpthread
+EXECUTABLE=app.out
 
-$(OUTFILE): $(OBJS)
-	$(CC) $(CFLAGS) -o $(OUTFILE) $(OBJS) && ./$(OUTFILE)
-$(OBJS): $(SRCS)
-	$(CC) $(CFLAGS) -c $(SRCS)
+all: $(SOURCES) $(EXECUTABLE)
+	
+$(EXECUTABLE): $(OBJECTS) 
+	$(CC) $(OBJECTS) -o $@ $(LDFLAGS) 
+
+.cpp.o:
+	$(CC) $(CFLAGS) $< -o $@
+
 clean:
-	rm -rf *.o *.out
-
+	rm -f *.o

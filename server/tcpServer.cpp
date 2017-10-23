@@ -166,12 +166,13 @@ void tcpServer::prepareSocket() {
         break;
     }
 
-    freeaddrinfo(servinfo); 
 
     if (p == NULL)  {
         throw std::runtime_error("server: failed to bind");
     }
 
+    freeaddrinfo(servinfo); 
+    
 
     if (listen(this->socketFd, MAXCLIENTS) < 0) {
         throw std::runtime_error("server: listen error");

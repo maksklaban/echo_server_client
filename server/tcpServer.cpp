@@ -154,7 +154,6 @@ void tcpServer::prepareSocket() {
         if (setsockopt(this->socketFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
             perror("server: setsockopt error");
             continue;
-            // throw std::runtime_error("server: setsockopt error");
         }
 
         if (bind(this->socketFd, p->ai_addr, p->ai_addrlen) < 0) {
@@ -172,7 +171,7 @@ void tcpServer::prepareSocket() {
     }
 
     freeaddrinfo(servinfo); 
-    
+
 
     if (listen(this->socketFd, MAXCLIENTS) < 0) {
         throw std::runtime_error("server: listen error");
